@@ -25,7 +25,8 @@ import (
 )
 
 const (
-	azStorageType = "azureBlob"
+	azStorageType   = "azureBlob"
+	latestVersionID = ""
 
 	deleteMarkerContent = ""
 
@@ -41,6 +42,10 @@ type azStorage struct {
 }
 
 func (az *azStorage) GetBlob(ctx context.Context, b blob.ID, offset, length int64, output blob.OutputBuffer) error {
+	return az.getBlobWithVersion(ctx, b, latestVersionID, offset, length, output)
+}
+
+func (az *azStorage) getBlobWithVersion(ctx context.Context, b blob.ID, versionID string, offset, length int64, output blob.OutputBuffer) error {
 	if offset < 0 {
 		return errors.Wrap(blob.ErrInvalidRange, "invalid offset")
 	}
@@ -58,7 +63,14 @@ func (az *azStorage) GetBlob(ctx context.Context, b blob.ID, offset, length int6
 		opt.Range.Count = l1
 	}
 
-	resp, err := az.service.DownloadStream(ctx, az.container, az.getObjectNameString(b), opt)
+	bc, err := az.service.ServiceClient().
+		NewContainerClient(az.container).
+		NewBlobClient(az.getObjectNameString(b)).
+		WithVersionID(versionID)
+	if err != nil {
+		return err
+	}
+	resp, err := bc.DownloadStream(ctx, opt)
 	if err != nil {
 		return translateError(err)
 	}
@@ -379,7 +391,12 @@ func New(ctx context.Context, opt *Options, isCreate bool) (blob.Storage, error)
 		service:   service,
 	}
 
-	az := retrying.NewWrapper(raw)
+	st, err := maybePointInTimeStore(ctx, raw, opt.PointInTime)
+	if err != nil {
+		return nil, err
+	}
+
+	az := retrying.NewWrapper(st)
 
 	// verify Azure connection is functional by listing blobs in a bucket, which will fail if the container
 	// does not exist. We list with a prefix that will not exist, to avoid iterating through any objects.
