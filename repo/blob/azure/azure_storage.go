@@ -239,6 +239,7 @@ func (az *azStorage) getBlobMeta(it *azblobmodels.BlobItem) blob.Metadata {
 	} else {
 		bm.Timestamp = *it.Properties.LastModified
 	}
+
 	return bm
 }
 

@@ -274,7 +274,7 @@ func TestAzureStorageInvalidCreds(t *testing.T) {
 	}
 }
 
-// TestAzureStorageImmutabilityProtection runs through the behaviour of Azure immutability protection.
+// TestAzureStorageImmutabilityProtection runs through the behavior of Azure immutability protection.
 func TestAzureStorageImmutabilityProtection(t *testing.T) {
 	t.Parallel()
 	testutil.ProviderTest(t)
@@ -307,8 +307,11 @@ func TestAzureStorageImmutabilityProtection(t *testing.T) {
 
 	defer st.Close(ctx)
 
-	const blobName = "sExample"
-	const dummyBlob = blob.ID(blobName)
+	const (
+		blobName  = "sExample"
+		dummyBlob = blob.ID(blobName)
+	)
+
 	blobNameFullPath := prefix + blobName
 
 	putOpts := blob.PutOptions{
@@ -352,37 +355,43 @@ func TestAzureStorageImmutabilityProtection(t *testing.T) {
 }
 
 func getBlobCount(ctx context.Context, t *testing.T, st blob.Storage, prefix blob.ID) int {
-	count := 0
+	t.Helper()
+
+	var count int
+
 	err := st.ListBlobs(ctx, prefix, func(bm blob.Metadata) error {
 		count++
 		return nil
 	})
 	require.NoError(t, err)
+
 	return count
 }
 
-func getBlobRetention(ctx context.Context, t *testing.T, cli *azblob.Client, container string, blobName string) time.Time {
+func getBlobRetention(ctx context.Context, t *testing.T, cli *azblob.Client, container, blobName string) time.Time {
+	t.Helper()
+
 	props, err := cli.ServiceClient().
 		NewContainerClient(container).
 		NewBlobClient(blobName).
 		GetProperties(ctx, nil)
 	require.NoError(t, err)
+
 	return *props.ImmutabilityPolicyExpiresOn
 }
 
 // getAzureCLI returns a separate client to verify things the Storage interface doesn't support.
 func getAzureCLI(t *testing.T, storageAccount, storageKey string) *azblob.Client {
+	t.Helper()
+
 	cred, err := azblob.NewSharedKeyCredential(storageAccount, storageKey)
-	if err != nil {
-		t.Fatal("can't create new credential")
-	}
+	require.NoError(t, err)
 
 	storageHostname := fmt.Sprintf("%v.blob.core.windows.net", storageAccount)
 	cli, err := azblob.NewClientWithSharedKeyCredential(
 		fmt.Sprintf("https://%s/", storageHostname), cred, nil,
 	)
-	if err != nil {
-		t.Fatal("can't create new client")
-	}
+	require.NoError(t, err)
+
 	return cli
 }
