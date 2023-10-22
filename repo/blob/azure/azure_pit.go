@@ -75,6 +75,7 @@ func newestAtUnlessDeleted(vs []versionMetadata, t time.Time) (v versionMetadata
 	}
 
 	v = vs[len(vs)-1]
+
 	return v, !v.IsDeleteMarker
 }
 
@@ -160,6 +161,7 @@ func (az *azPointInTimeStorage) isAzureDeleteMarker(it *azblobmodels.BlobItem) b
 	if it.HasVersionsOnly != nil {
 		isDeleteMarker = *it.HasVersionsOnly
 	}
+
 	return isDeleteMarker
 }
 

@@ -68,8 +68,9 @@ func (az *azStorage) getBlobWithVersion(ctx context.Context, b blob.ID, versionI
 		NewBlobClient(az.getObjectNameString(b)).
 		WithVersionID(versionID)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get versioned blob client")
 	}
+
 	resp, err := bc.DownloadStream(ctx, opt)
 	if err != nil {
 		return translateError(err)

@@ -36,6 +36,7 @@ func TestGetBlobVersions(t *testing.T) {
 	// use context that gets canceled after opening storage to ensure it's not used beyond New().
 	newctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
 	prefix := fmt.Sprintf("test-%v-%x-", clock.Now().Unix(), data)
 	opts := &azure.Options{
 		Container:      container,
@@ -53,6 +54,7 @@ func TestGetBlobVersions(t *testing.T) {
 		updatedData  = "some update"
 		latestData   = "latest version"
 	)
+
 	dataBlobs := []string{originalData, updatedData, latestData}
 
 	const blobName = "TestGetBlobVersions"
@@ -60,8 +62,8 @@ func TestGetBlobVersions(t *testing.T) {
 	dataTimestamps, err := putBlobs(ctx, st, blobID, dataBlobs)
 	require.NoError(t, err)
 
-	pastPIT := time.Now().Add(-1 * time.Hour).UTC()
-	futurePIT := time.Now().Add(1 * time.Hour).UTC()
+	pastPIT := time.Now().Add(-1 * time.Hour).UTC()  // nolint
+	futurePIT := time.Now().Add(1 * time.Hour).UTC() // nolint
 
 	for _, tt := range []struct {
 		testName         string
@@ -136,6 +138,7 @@ func TestGetBlobVersionsWithDeletion(t *testing.T) {
 	// use context that gets canceled after opening storage to ensure it's not used beyond New().
 	newctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
 	prefix := fmt.Sprintf("test-%v-%x-", clock.Now().Unix(), data)
 	opts := &azure.Options{
 		Container:      container,
@@ -152,6 +155,7 @@ func TestGetBlobVersionsWithDeletion(t *testing.T) {
 		originalData = "original"
 		updatedData  = "some update"
 	)
+
 	dataBlobs := []string{originalData, updatedData}
 
 	const blobName = "TestGetBlobVersionsWithDeletion"
@@ -176,6 +180,7 @@ func TestGetBlobVersionsWithDeletion(t *testing.T) {
 	// blob visible again with PIT set.
 	count = getBlobCount(ctx, t, st, blobID)
 	require.Equal(t, 1, count)
+
 	var tmp gather.WriteBuffer
 	err = st.GetBlob(ctx, blobID, 0, -1, &tmp)
 	require.NoError(t, err)
@@ -194,18 +199,23 @@ func putBlobs(ctx context.Context, cli blob.Storage, blobID blob.ID, blobs []str
 		RetentionMode:   blob.Locked,
 		RetentionPeriod: 4 * time.Second,
 	}
+
 	var putTimes []time.Time
+
 	for _, b := range blobs {
 		if err := cli.PutBlob(ctx, blobID, gather.FromSlice([]byte(b)), putOpts); err != nil {
 			return nil, errors.Wrap(err, "putting blob")
 		}
+
 		m, err := cli.GetMetadata(ctx, blobID)
 		if err != nil {
 			return nil, errors.Wrap(err, "getting metadata")
 		}
+
 		putTimes = append(putTimes, m.Timestamp)
 		// sleep because granularity is 1 second and we should separate to show PIT views.
 		time.Sleep(1 * time.Second)
 	}
+
 	return putTimes, nil
 }
