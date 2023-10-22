@@ -131,6 +131,7 @@ func (az *azStorage) PutBlob(ctx context.Context, b blob.ID, data blob.Bytes, op
 	}
 
 	_, err := az.putBlob(ctx, b, data, opts)
+
 	return err
 }
 
@@ -165,6 +166,7 @@ func (az *azStorage) ExtendBlobRetention(ctx context.Context, b blob.ID, opts bl
 	if err != nil {
 		return errors.Wrap(err, "unable to extend retention period")
 	}
+
 	return nil
 }
 
@@ -255,6 +257,7 @@ func (az *azStorage) putBlob(ctx context.Context, b blob.ID, data blob.Bytes, op
 	uo := &azblockblob.UploadOptions{
 		Metadata: metadata,
 	}
+
 	if opts.HasRetentionOptions() {
 		mode := azblobblob.ImmutabilityPolicySetting(opts.RetentionMode)
 		retainUntilDate := clock.Now().Add(opts.RetentionPeriod).UTC()
@@ -314,7 +317,7 @@ func (az *azStorage) retryDeleteBlob(ctx context.Context, b blob.ID) error {
 		return errors.Wrap(err, "failed to delete the delete marker blob version")
 	}
 
-	return err
+	return nil
 }
 
 // New creates new Azure Blob Storage-backed storage with specified options:
