@@ -165,6 +165,7 @@ func (az *azStorage) ExtendBlobRetention(ctx context.Context, b blob.ID, opts bl
 	if err != nil {
 		return errors.Wrap(err, "unable to extend retention period")
 	}
+
 	return nil
 }
 
