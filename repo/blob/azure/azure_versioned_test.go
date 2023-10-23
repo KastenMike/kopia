@@ -62,8 +62,8 @@ func TestGetBlobVersions(t *testing.T) {
 	dataTimestamps, err := putBlobs(ctx, st, blobID, dataBlobs)
 	require.NoError(t, err)
 
-	pastPIT := time.Now().Add(-1 * time.Hour).UTC()  // nolint
-	futurePIT := time.Now().Add(1 * time.Hour).UTC() // nolint
+	pastPIT := clock.Now().Add(-1 * time.Hour).UTC()
+	futurePIT := clock.Now().Add(1 * time.Hour).UTC()
 
 	for _, tt := range []struct {
 		testName         string
