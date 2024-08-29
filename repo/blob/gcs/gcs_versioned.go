@@ -95,11 +95,7 @@ func toBlobID(blobName, prefix string) blob.ID {
 }
 
 func (gcs *gcsPointInTimeStorage) getVersionMetadata(prefix string, oi *storage.ObjectAttrs) versionMetadata {
-	bm := blob.Metadata{
-		BlobID:    toBlobID(oi.Name, prefix),
-		Length:    oi.Size,
-		Timestamp: oi.Created,
-	}
+	bm := gcs.getBlobMeta(oi)
 	return versionMetadata{
 		Metadata:       bm,
 		IsDeleteMarker: !oi.Deleted.IsZero() && (gcs.PointInTime == nil || oi.Deleted.Before(*gcs.PointInTime)),

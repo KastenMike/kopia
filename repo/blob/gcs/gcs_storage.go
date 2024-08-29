@@ -75,14 +75,26 @@ func (gcs *gcsStorage) getBlobWithVersion(ctx context.Context, b blob.ID, versio
 	return blob.EnsureLengthExactly(output.Length(), length)
 }
 
-func (gcs *gcsStorage) GetMetadata(oi *storage.ObjectAttrs) blob.Metadata {
-	bm := blob.Metadata{
-		BlobID:    toBlobID(oi.Name, gcs.Prefix),
-		Length:    oi.Size,
-		Timestamp: oi.Created,
+func (gcs *gcsStorage) GetMetadata(ctx context.Context, b blob.ID) (blob.Metadata, error) {
+	objName := gcs.getObjectNameString(b)
+	obj := gcs.bucket.Object(objName)
+
+	attrs, err := obj.Attrs(ctx)
+	if err != nil {
+		return blob.Metadata{}, errors.Wrap(translateError(err), "Attrs")
 	}
 
-	if t, ok := timestampmeta.FromValue(oi.Metadata[timeMapKey]); ok {
+	return gcs.getBlobMeta(attrs), nil
+}
+
+func (gcs *gcsStorage) getBlobMeta(attrs *storage.ObjectAttrs) blob.Metadata {
+	bm := blob.Metadata{
+		BlobID:    toBlobID(attrs.Name, gcs.Prefix),
+		Length:    attrs.Size,
+		Timestamp: attrs.Created,
+	}
+
+	if t, ok := timestampmeta.FromValue(attrs.Metadata[timeMapKey]); ok {
 		bm.Timestamp = t
 	}
 	return bm
@@ -203,7 +215,7 @@ func (gcs *gcsStorage) ListBlobs(ctx context.Context, prefix blob.ID, callback f
 
 	oa, err := lst.Next()
 	for err == nil {
-		bm := gcs.GetMetadata(oa)
+		bm := gcs.getBlobMeta(oa)
 
 		if cberr := callback(bm); cberr != nil {
 			return cberr
