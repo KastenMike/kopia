@@ -17,7 +17,6 @@ import (
 	"github.com/kopia/kopia/internal/testlogging"
 	"github.com/kopia/kopia/internal/testutil"
 	"github.com/kopia/kopia/repo/blob"
-	"github.com/kopia/kopia/repo/blob/gcs"
 )
 
 func TestCleanupOldData(t *testing.T) {
@@ -25,7 +24,7 @@ func TestCleanupOldData(t *testing.T) {
 	testutil.ProviderTest(t)
 	ctx := testlogging.Context(t)
 
-	st, err := gcs.New(ctx, mustGetOptionsOrSkip(t, ""), false)
+	st, err := New(ctx, mustGetOptionsOrSkip(t, ""), false)
 	require.NoError(t, err)
 
 	defer st.Close(ctx)
@@ -41,7 +40,7 @@ func TestGCSStorage(t *testing.T) {
 
 	// use context that gets canceled after opening storage to ensure it's not used beyond New().
 	newctx, cancel := context.WithCancel(ctx)
-	st, err := gcs.New(newctx, mustGetOptionsOrSkip(t, uuid.NewString()), false)
+	st, err := New(newctx, mustGetOptionsOrSkip(t, uuid.NewString()), false)
 
 	cancel()
 	require.NoError(t, err)
@@ -66,7 +65,7 @@ func TestGCSStorageInvalid(t *testing.T) {
 
 	ctx := testlogging.Context(t)
 
-	if _, err := gcs.New(ctx, &gcs.Options{
+	if _, err := New(ctx, &Options{
 		BucketName:                    bucket + "-no-such-bucket",
 		ServiceAccountCredentialsFile: os.Getenv("KOPIA_GCS_CREDENTIALS_FILE"),
 	}, false); err == nil {
@@ -85,7 +84,7 @@ func gunzip(d []byte) ([]byte, error) {
 	return io.ReadAll(z)
 }
 
-func mustGetOptionsOrSkip(t *testing.T, prefix string) *gcs.Options {
+func mustGetOptionsOrSkip(t *testing.T, prefix string) *Options {
 	t.Helper()
 
 	bucket := os.Getenv("KOPIA_GCS_TEST_BUCKET")
@@ -103,7 +102,7 @@ func mustGetOptionsOrSkip(t *testing.T, prefix string) *gcs.Options {
 		t.Skip("skipping test because GCS credentials file can't be unzipped")
 	}
 
-	return &gcs.Options{
+	return &Options{
 		BucketName:                   bucket,
 		ServiceAccountCredentialJSON: credData,
 		Prefix:                       prefix,
