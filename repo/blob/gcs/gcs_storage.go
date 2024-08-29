@@ -146,7 +146,7 @@ func (gcs *gcsStorage) putBlob(ctx context.Context, b blob.ID, data blob.Bytes, 
 	if opts.RetentionPeriod != 0 {
 		retainUntilDate := clock.Now().Add(opts.RetentionPeriod).UTC()
 		writer.ObjectAttrs.Retention = &storage.ObjectRetention{
-			Mode:        "Unlocked",
+			Mode:        string(blob.Locked),
 			RetainUntil: retainUntilDate,
 		}
 	}
@@ -185,12 +185,10 @@ func (gcs *gcsStorage) DeleteBlob(ctx context.Context, b blob.ID) error {
 }
 
 func (gcs *gcsStorage) ExtendBlobRetention(ctx context.Context, b blob.ID, opts blob.ExtendOptions) error {
-	retentionMode := "Unlocked" // TODO: properly handle lock mode
-
 	retainUntilDate := clock.Now().Add(opts.RetentionPeriod).UTC().Truncate(time.Second)
 
 	ObjectRetention := &storage.ObjectRetention{
-		Mode:        retentionMode,
+		Mode:        string(blob.Locked),
 		RetainUntil: retainUntilDate,
 	}
 
