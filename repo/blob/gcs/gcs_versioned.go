@@ -91,7 +91,7 @@ func (gcs *gcsPointInTimeStorage) list(ctx context.Context, prefix blob.ID, only
 }
 
 func toBlobID(blobName, prefix string) blob.ID {
-	return blob.ID(prefix + strings.TrimPrefix(blobName, prefix))
+	return blob.ID(strings.TrimPrefix(blobName, prefix))
 }
 
 func (gcs *gcsPointInTimeStorage) getVersionMetadata(prefix string, oi *storage.ObjectAttrs) versionMetadata {

@@ -102,22 +102,13 @@ func (gcs *gcsPointInTimeStorage) getMetadata(ctx context.Context, b blob.ID) (v
 
 // newestAtUnlessDeleted returns the last version in the list older than the PIT.
 func newestAtUnlessDeleted(vs []versionMetadata, t time.Time) (v versionMetadata, found bool) {
-	fmt.Printf("newestAtUnlessDeleted %s with %d versions\n", t, len(vs))
-
-	for _, xxx := range vs {
-		fmt.Printf("newestAtUnlessDeleted: PRE SORT: found version %s del %s. deleted=%t\n", xxx.Version, xxx.Timestamp, xxx.IsDeleteMarker)
-	}
-
 	vs = getOlderThan(vs, t)
 
 	if len(vs) == 0 {
 		return versionMetadata{}, false
 	}
 
-	//v = vs[0] // versione s3
-	v = vs[len(vs)-1] // versione azure
-
-	fmt.Printf("newestAtUnlessDeleted del pit %s deleted=%t\n", v.Timestamp, v.IsDeleteMarker)
+	v = vs[len(vs)-1]
 
 	//return v, !v.IsDeleteMarker
 	return v, !v.IsDeleteMarker
@@ -156,8 +147,6 @@ func maybePointInTimeStore(ctx context.Context, gcs *gcsStorage, pointInTime *ti
 	if !attrs.VersioningEnabled {
 		return nil, errors.Errorf("cannot create point-in-time view for non-versioned bucket '%s'", gcs.BucketName)
 	}
-
-	fmt.Printf("Versioning attivo su %s, instanzio il wrapper\n", gcs.BucketName)
 
 	return readonly.NewWrapper(&gcsPointInTimeStorage{
 		gcsStorage:  *gcs,

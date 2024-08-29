@@ -187,10 +187,13 @@ func (c *commandRepositoryCreate) populateRepository(ctx context.Context, passwo
 
 		c.out.printStderr("\nTo find more information about default policy run 'kopia policy get'.\nTo change the policy use 'kopia policy set' command.\n")
 
+		c.out.printStdout("before setDefaultMaintenanceParameters...")
 		if err := setDefaultMaintenanceParameters(ctx, w); err != nil {
+			c.out.printStdout("setDefaultMaintenanceParameters ERR!" + err.Error())
 			return errors.Wrap(err, "unable to set maintenance parameters")
 		}
 
+		c.out.printStdout("done with populateRepository...")
 		return nil
 	})
 }

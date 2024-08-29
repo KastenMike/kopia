@@ -44,7 +44,6 @@ func (gcs *gcsStorage) GetBlob(ctx context.Context, b blob.ID, offset, length in
 
 // getBlobWithVersion returns full or partial contents of a blob with given ID and version.
 func (gcs *gcsStorage) getBlobWithVersion(ctx context.Context, b blob.ID, version string, offset, length int64, output blob.OutputBuffer) error {
-	fmt.Printf("getBlobWithVersion: blob %s versione %s\n", b, version)
 	if offset < 0 {
 		return blob.ErrInvalidRange
 	}
@@ -60,7 +59,6 @@ func (gcs *gcsStorage) getBlobWithVersion(ctx context.Context, b blob.ID, versio
 
 		reader, err := obj.NewRangeReader(ctx, offset, length)
 		if err != nil {
-			fmt.Printf("getBlobWithVersion: errore\n")
 			return errors.Wrap(err, "NewRangeReader")
 		}
 		defer reader.Close() //nolint:errcheck
@@ -77,25 +75,17 @@ func (gcs *gcsStorage) getBlobWithVersion(ctx context.Context, b blob.ID, versio
 	return blob.EnsureLengthExactly(output.Length(), length)
 }
 
-func (gcs *gcsStorage) GetMetadata(ctx context.Context, b blob.ID) (blob.Metadata, error) {
-	objName := gcs.getObjectNameString(b)
-	obj := gcs.bucket.Object(objName)
-
-	attrs, err := obj.Attrs(ctx)
-	if err != nil {
-		return blob.Metadata{}, errors.Wrap(translateError(err), "Attrs")
-	}
-
+func (gcs *gcsStorage) GetMetadata(oi *storage.ObjectAttrs) blob.Metadata {
 	bm := blob.Metadata{
-		BlobID:    b,
-		Length:    attrs.Size,
-		Timestamp: attrs.Created,
+		BlobID:    toBlobID(oi.Name, gcs.Prefix),
+		Length:    oi.Size,
+		Timestamp: oi.Created,
 	}
 
-	if t, ok := timestampmeta.FromValue(attrs.Metadata[timeMapKey]); ok {
+	if t, ok := timestampmeta.FromValue(oi.Metadata[timeMapKey]); ok {
 		bm.Timestamp = t
 	}
-	return bm, nil
+	return bm
 }
 
 func translateError(err error) error {
@@ -122,15 +112,6 @@ func translateError(err error) error {
 
 func (gcs *gcsStorage) PutBlob(ctx context.Context, b blob.ID, data blob.Bytes, opts blob.PutOptions) error {
 	_, err := gcs.putBlob(ctx, b, data, opts)
-
-	if opts.GetModTime != nil {
-		bm, err2 := gcs.GetMetadata(ctx, b)
-		if err2 != nil {
-			return err2
-		}
-
-		*opts.GetModTime = bm.Timestamp
-	}
 
 	return err
 }
@@ -222,15 +203,7 @@ func (gcs *gcsStorage) ListBlobs(ctx context.Context, prefix blob.ID, callback f
 
 	oa, err := lst.Next()
 	for err == nil {
-		bm := blob.Metadata{
-			BlobID:    blob.ID(oa.Name[len(gcs.Prefix):]),
-			Length:    oa.Size,
-			Timestamp: oa.Created,
-		}
-
-		if t, ok := timestampmeta.FromValue(oa.Metadata[timeMapKey]); ok {
-			bm.Timestamp = t
-		}
+		bm := gcs.GetMetadata(oa)
 
 		if cberr := callback(bm); cberr != nil {
 			return cberr
@@ -292,7 +265,6 @@ func New(ctx context.Context, opt *Options, isCreate bool) (blob.Storage, error)
 		bucket:        cli.Bucket(opt.BucketName),
 	}
 
-	fmt.Println("before pit...")
 	gcs, err := maybePointInTimeStore(ctx, st, opt.PointInTime)
 	if err != nil {
 		return nil, err
@@ -309,7 +281,6 @@ func New(ctx context.Context, opt *Options, isCreate bool) (blob.Storage, error)
 		return nil, errors.Wrap(err, "unable to list from the bucket")
 	}
 
-	fmt.Println("before new wrapper")
 	return retrying.NewWrapper(gcs), nil
 }
 
