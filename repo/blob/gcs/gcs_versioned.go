@@ -25,21 +25,8 @@ type versionMetadata struct {
 // versionMetadataCallback is called when processing the metadata for each blob version.
 type versionMetadataCallback func(versionMetadata) error
 
-// IsVersioned returns whether versioning is enabled in the store.
-// It returns true even if versioning is enabled but currently suspended for the
-// bucket. Notice that when object locking is enabled in a bucket, object
-// versioning is enabled and cannot be suspended.
-func (gcs *gcsStorage) IsVersioned(ctx context.Context) (bool, error) {
-	attrs, err := gcs.bucket.Attrs(ctx)
-	if err != nil {
-		return false, errors.Wrapf(err, "could not get versioning info for %s", gcs.BucketName)
-	}
-
-	return attrs.VersioningEnabled, nil
-}
-
 // getBlobVersions lists all the versions for the blob with the given ID.
-func (gcs *gcsStorage) getBlobVersions(ctx context.Context, prefix blob.ID, callback versionMetadataCallback) error {
+func (gcs *gcsPointInTimeStorage) getBlobVersions(ctx context.Context, prefix blob.ID, callback versionMetadataCallback) error {
 	var foundBlobs bool
 
 	if err := gcs.list(ctx, prefix, true, func(vm versionMetadata) error {
@@ -59,11 +46,11 @@ func (gcs *gcsStorage) getBlobVersions(ctx context.Context, prefix blob.ID, call
 }
 
 // listBlobVersions lists all versions for all the blobs with the given blob ID prefix.
-func (gcs *gcsStorage) listBlobVersions(ctx context.Context, prefix blob.ID, callback versionMetadataCallback) error {
+func (gcs *gcsPointInTimeStorage) listBlobVersions(ctx context.Context, prefix blob.ID, callback versionMetadataCallback) error {
 	return gcs.list(ctx, prefix, false, callback)
 }
 
-func (gcs *gcsStorage) list(ctx context.Context, prefix blob.ID, onlyMatching bool, callback versionMetadataCallback) error {
+func (gcs *gcsPointInTimeStorage) list(ctx context.Context, prefix blob.ID, onlyMatching bool, callback versionMetadataCallback) error {
 	fmt.Printf("in list per blob.ID: %s\n", prefix)
 	query := storage.Query{
 		Prefix: gcs.getObjectNameString(prefix),
@@ -91,7 +78,7 @@ func (gcs *gcsStorage) list(ctx context.Context, prefix blob.ID, onlyMatching bo
 		}
 
 		oi := attrs
-		om := gcs.infoToVersionMetadata(query.Prefix, oi)
+		om := gcs.getVersionMetadata(query.Prefix, oi)
 
 		fmt.Printf("found blob: %s -- om.BlobID: %s -- query.Prefix: %s -- prefix: %s\n", oi.Name, om.BlobID, query.Prefix, prefix)
 
@@ -107,16 +94,15 @@ func toBlobID(blobName, prefix string) blob.ID {
 	return blob.ID(prefix + strings.TrimPrefix(blobName, prefix))
 }
 
-func (gcs *gcsStorage) infoToVersionMetadata(prefix string, oi *storage.ObjectAttrs) versionMetadata {
+func (gcs *gcsPointInTimeStorage) getVersionMetadata(prefix string, oi *storage.ObjectAttrs) versionMetadata {
 	bm := blob.Metadata{
 		BlobID:    toBlobID(oi.Name, prefix),
 		Length:    oi.Size,
 		Timestamp: oi.Created,
 	}
-
 	return versionMetadata{
 		Metadata:       bm,
-		IsDeleteMarker: !oi.Deleted.IsZero() && (gcs.PointInTime == nil || oi.Deleted.Before(*gcs.PointInTime)), // needs to consider PIT...
+		IsDeleteMarker: !oi.Deleted.IsZero() && (gcs.PointInTime == nil || oi.Deleted.Before(*gcs.PointInTime)),
 		Version:        strconv.FormatInt(oi.Generation, 10),
 	}
 }

@@ -78,23 +78,12 @@ func (gcs *gcsStorage) getBlobWithVersion(ctx context.Context, b blob.ID, versio
 }
 
 func (gcs *gcsStorage) GetMetadata(ctx context.Context, b blob.ID) (blob.Metadata, error) {
-	bm, err := gcs.getVersionMetadata(ctx, b, "")
-
-	return bm.Metadata, err
-}
-
-func (gcs *gcsStorage) getVersionMetadata(ctx context.Context, b blob.ID, version string) (versionMetadata, error) {
-	fmt.Printf("getVersionMetadata per %s#%s", b, version)
 	objName := gcs.getObjectNameString(b)
 	obj := gcs.bucket.Object(objName)
-	if version != "" {
-		gen, _ := strconv.ParseInt(version, 10, 64)
-		obj = obj.Generation(gen)
-	}
 
 	attrs, err := obj.Attrs(ctx)
 	if err != nil {
-		return versionMetadata{}, errors.Wrap(translateError(err), "Attrs")
+		return blob.Metadata{}, errors.Wrap(translateError(err), "Attrs")
 	}
 
 	bm := blob.Metadata{
@@ -106,8 +95,7 @@ func (gcs *gcsStorage) getVersionMetadata(ctx context.Context, b blob.ID, versio
 	if t, ok := timestampmeta.FromValue(attrs.Metadata[timeMapKey]); ok {
 		bm.Timestamp = t
 	}
-
-	return gcs.infoToVersionMetadata(attrs.Name, attrs), nil
+	return bm, nil
 }
 
 func translateError(err error) error {
@@ -147,7 +135,7 @@ func (gcs *gcsStorage) PutBlob(ctx context.Context, b blob.ID, data blob.Bytes, 
 	return err
 }
 
-func (gcs *gcsStorage) putBlob(ctx context.Context, b blob.ID, data blob.Bytes, opts blob.PutOptions) (versionMetadata, error) {
+func (gcs *gcsStorage) putBlob(ctx context.Context, b blob.ID, data blob.Bytes, opts blob.PutOptions) (blob.Metadata, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	obj := gcs.bucket.Object(gcs.getObjectNameString(b))
@@ -177,21 +165,21 @@ func (gcs *gcsStorage) putBlob(ctx context.Context, b blob.ID, data blob.Bytes, 
 
 		_ = writer.Close() // failing already, ignore the error
 
-		return versionMetadata{}, translateError(err)
+		return blob.Metadata{}, translateError(err)
 	}
 
 	defer cancel()
 
 	// calling close before cancel() causes it to commit the upload.
 	if err := writer.Close(); err != nil {
-		return versionMetadata{}, translateError(err)
+		return blob.Metadata{}, translateError(err)
 	}
 
 	if opts.GetModTime != nil {
 		*opts.GetModTime = writer.Attrs().Updated
 	}
 
-	return versionMetadata{}, nil
+	return blob.Metadata{}, nil
 }
 
 func (gcs *gcsStorage) DeleteBlob(ctx context.Context, b blob.ID) error {
