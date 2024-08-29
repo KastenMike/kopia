@@ -129,7 +129,7 @@ func (c *commandSnapshotCreate) run(ctx context.Context, rep repo.RepositoryWrit
 
 	for _, snapshotDir := range sources {
 		if u.IsCanceled() {
-			log(ctx).Infof("Upload canceled")
+			log(ctx).Info("Upload canceled")
 			break
 		}
 
@@ -207,7 +207,7 @@ func validateStartEndTime(st, et string) error {
 
 func (c *commandSnapshotCreate) setupUploader(rep repo.RepositoryWriter) *snapshotfs.Uploader {
 	u := snapshotfs.NewUploader(rep)
-	u.MaxUploadBytes = c.snapshotCreateCheckpointUploadLimitMB << 20 //nolint:gomnd
+	u.MaxUploadBytes = c.snapshotCreateCheckpointUploadLimitMB << 20 //nolint:mnd
 
 	if c.snapshotCreateForceEnableActions {
 		u.EnableActions = true
@@ -233,7 +233,7 @@ func (c *commandSnapshotCreate) setupUploader(rep repo.RepositoryWriter) *snapsh
 		u.CheckpointInterval = interval
 	}
 
-	c.svc.onCtrlC(u.Cancel)
+	c.svc.onTerminate(u.Cancel)
 
 	u.ForceHashPercentage = c.snapshotCreateForceHash
 	u.ParallelUploads = c.snapshotCreateParallelUploads
@@ -311,7 +311,7 @@ func (c *commandSnapshotCreate) snapshotSingleSource(ctx context.Context, fsEntr
 	ignoreIdenticalSnapshot := policyTree.EffectivePolicy().RetentionPolicy.IgnoreIdenticalSnapshots.OrDefault(false)
 	if ignoreIdenticalSnapshot && len(previous) > 0 {
 		if previous[0].RootObjectID() == manifest.RootObjectID() {
-			log(ctx).Infof("\n Not saving snapshot because no files have been changed since previous snapshot")
+			log(ctx).Info("\n Not saving snapshot because no files have been changed since previous snapshot")
 			return nil
 		}
 	}
@@ -463,7 +463,6 @@ func (c *commandSnapshotCreate) getContentToSnapshot(ctx context.Context, dir st
 
 	if c.sourceOverride != "" {
 		info, err = parseFullSource(c.sourceOverride, rep.ClientOptions().Hostname, rep.ClientOptions().Username)
-
 		if err != nil {
 			return nil, info, false, errors.Wrapf(err, "invalid source override %v", c.sourceOverride)
 		}

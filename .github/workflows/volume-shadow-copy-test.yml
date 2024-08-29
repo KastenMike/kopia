@@ -1,0 +1,42 @@
+name: Volume Shadow Copy Test
+on:
+  push:
+    branches: [ master ]
+    tags:
+      - v*
+  pull_request:
+    branches: [ master ]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  vss-test:
+    name: Volume Shadow Copy Test
+    runs-on: windows-latest
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      with:
+        fetch-depth: 0
+    - name: Set up Go
+      uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+      with:
+        go-version-file: 'go.mod'
+        check-latest: true
+      id: go
+    - name: Install gsudo
+      shell: bash
+      run: |
+        choco install -y --no-progress gsudo
+        echo "C:\tools\gsudo\Current" >> $GITHUB_PATH
+    - name: Admin Test
+      run: gsudo make os-snapshot-tests
+    - name: Non-Admin Test
+      run: gsudo -i Medium make os-snapshot-tests
+    - name: Upload Logs
+      uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a # v4.3.6
+      with:
+        name: logs
+        path: .logs/**/*.log
+        if-no-files-found: ignore
+      if: ${{ always() }}

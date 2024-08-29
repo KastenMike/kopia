@@ -119,7 +119,7 @@ func getProviderOptions(tb testing.TB, envName string) *Options {
 	}
 
 	if o.Prefix != "" {
-		tb.Fatalf("options providd in '%v' must not specify a prefix", envName)
+		tb.Fatalf("options provided in '%v' must not specify a prefix", envName)
 	}
 
 	return &o
@@ -165,8 +165,6 @@ func TestS3StorageProviders(t *testing.T) {
 	t.Parallel()
 
 	for k, env := range providerCreds {
-		env := env
-
 		t.Run(k, func(t *testing.T) {
 			opt := getProviderOptions(t, env)
 
@@ -484,8 +482,8 @@ func TestS3StorageMinioSTS(t *testing.T) {
 		DoNotUseTLS:     true,
 	})
 
-	require.NotEqual(t, kopiaCreds.AccessKeyID, minioRootAccessKeyID)
-	require.NotEqual(t, kopiaCreds.SecretAccessKey, minioRootSecretAccessKey)
+	require.NotEqual(t, minioRootAccessKeyID, kopiaCreds.AccessKeyID)
+	require.NotEqual(t, minioRootSecretAccessKey, kopiaCreds.SecretAccessKey)
 	require.NotEmpty(t, kopiaCreds.SessionToken)
 
 	testStorage(t, &Options{
@@ -648,7 +646,6 @@ func createClient(tb testing.TB, opt *Options) *minio.Client {
 	var err error
 
 	transport, err = getCustomTransport(opt)
-
 	if err != nil {
 		tb.Fatalf("unable to get proper transport: %v", err)
 	}

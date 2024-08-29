@@ -27,7 +27,9 @@ type Policy struct {
 	ErrorHandlingPolicy ErrorHandlingPolicy `json:"errorHandling,omitempty"`
 	SchedulingPolicy    SchedulingPolicy    `json:"scheduling,omitempty"`
 	CompressionPolicy   CompressionPolicy   `json:"compression,omitempty"`
+	SplitterPolicy      SplitterPolicy      `json:"splitter,omitempty"`
 	Actions             ActionsPolicy       `json:"actions,omitempty"`
+	OSSnapshotPolicy    OSSnapshotPolicy    `json:"osSnapshots,omitempty"`
 	LoggingPolicy       LoggingPolicy       `json:"logging,omitempty"`
 	UploadPolicy        UploadPolicy        `json:"upload,omitempty"`
 	NoParent            bool                `json:"noParent,omitempty"`
@@ -41,7 +43,9 @@ type Definition struct {
 	ErrorHandlingPolicy ErrorHandlingPolicyDefinition `json:"errorHandling,omitempty"`
 	SchedulingPolicy    SchedulingPolicyDefinition    `json:"scheduling,omitempty"`
 	CompressionPolicy   CompressionPolicyDefinition   `json:"compression,omitempty"`
+	SplitterPolicy      SplitterPolicyDefinition      `json:"splitter,omitempty"`
 	Actions             ActionsPolicyDefinition       `json:"actions,omitempty"`
+	OSSnapshotPolicy    OSSnapshotPolicyDefinition    `json:"osSnapshots,omitempty"`
 	LoggingPolicy       LoggingPolicyDefinition       `json:"logging,omitempty"`
 	UploadPolicy        UploadPolicyDefinition        `json:"upload,omitempty"`
 }

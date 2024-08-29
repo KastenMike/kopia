@@ -250,7 +250,7 @@ func (s *sourceManager) cancel(ctx context.Context) serverapi.SourceActionRespon
 	log(ctx).Debugw("cancel triggered via API", "source", s.src)
 
 	if u := s.currentUploader(); u != nil {
-		log(ctx).Infof("canceling current upload")
+		log(ctx).Info("canceling current upload")
 		u.Cancel()
 	}
 
@@ -265,7 +265,7 @@ func (s *sourceManager) pause(ctx context.Context) serverapi.SourceActionRespons
 	s.sourceMutex.Unlock()
 
 	if u := s.currentUploader(); u != nil {
-		log(ctx).Infof("canceling current upload")
+		log(ctx).Info("canceling current upload")
 		u.Cancel()
 	}
 
@@ -336,6 +336,7 @@ func (s *sourceManager) snapshotInternal(ctx context.Context, ctrl uitask.Contro
 		},
 	}, func(ctx context.Context, w repo.RepositoryWriter) error {
 		log(ctx).Debugf("uploading %v", s.src)
+
 		u := snapshotfs.NewUploader(w)
 
 		ctrl.OnCancel(u.Cancel)
@@ -359,8 +360,8 @@ func (s *sourceManager) snapshotInternal(ctx context.Context, ctrl uitask.Contro
 		s.setUploader(u)
 
 		manifest, err := u.Upload(ctx, localEntry, policyTree, s.src, manifestsSinceLastCompleteSnapshot...)
-		prog.report(true)
 
+		prog.report(true)
 		s.setUploader(nil)
 
 		if err != nil {
@@ -370,7 +371,7 @@ func (s *sourceManager) snapshotInternal(ctx context.Context, ctrl uitask.Contro
 		ignoreIdenticalSnapshot := policyTree.EffectivePolicy().RetentionPolicy.IgnoreIdenticalSnapshots.OrDefault(false)
 		if ignoreIdenticalSnapshot && len(manifestsSinceLastCompleteSnapshot) > 0 {
 			if manifestsSinceLastCompleteSnapshot[0].RootObjectID() == manifest.RootObjectID() {
-				log(ctx).Debugf("Not saving snapshot because no files have been changed since previous snapshot")
+				log(ctx).Debug("Not saving snapshot because no files have been changed since previous snapshot")
 				return nil
 			}
 		}
@@ -385,6 +386,7 @@ func (s *sourceManager) snapshotInternal(ctx context.Context, ctrl uitask.Contro
 		}
 
 		log(ctx).Debugf("created snapshot %v", snapshotID)
+
 		return nil
 	})
 }

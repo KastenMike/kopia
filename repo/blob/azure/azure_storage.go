@@ -133,14 +133,21 @@ func translateError(err error) error {
 }
 
 func (az *azStorage) PutBlob(ctx context.Context, b blob.ID, data blob.Bytes, opts blob.PutOptions) error {
-	switch {
-	case opts.HasRetentionOptions():
-		return errors.Wrap(blob.ErrUnsupportedPutBlobOption, "blob-retention")
-	case opts.DoNotRecreate:
+	if opts.DoNotRecreate {
 		return errors.Wrap(blob.ErrUnsupportedPutBlobOption, "do-not-recreate")
 	}
 
-	_, err := az.putBlob(ctx, b, data, opts)
+	o := blob.PutOptions{
+		RetentionPeriod: opts.RetentionPeriod,
+		SetModTime:      opts.SetModTime,
+		GetModTime:      opts.GetModTime,
+	}
+
+	if opts.HasRetentionOptions() {
+		o.RetentionMode = blob.Locked // override Compliance/Governance to be Locked for Azure
+	}
+
+	_, err := az.putBlob(ctx, b, data, o)
 
 	return err
 }
@@ -165,13 +172,31 @@ func (az *azStorage) DeleteBlob(ctx context.Context, b blob.ID) error {
 	return err
 }
 
+// ExtendBlobRetention extends a blob retention period.
+func (az *azStorage) ExtendBlobRetention(ctx context.Context, b blob.ID, opts blob.ExtendOptions) error {
+	retainUntilDate := clock.Now().Add(opts.RetentionPeriod).UTC()
+	mode := azblobblob.ImmutabilityPolicySetting(blob.Locked) // overwrite the S3 values
+
+	_, err := az.service.ServiceClient().
+		NewContainerClient(az.Container).
+		NewBlobClient(az.getObjectNameString(b)).
+		SetImmutabilityPolicy(ctx, retainUntilDate, &azblobblob.SetImmutabilityPolicyOptions{
+			Mode: &mode,
+		})
+	if err != nil {
+		return errors.Wrap(err, "unable to extend retention period")
+	}
+
+	return nil
+}
+
 func (az *azStorage) getObjectNameString(b blob.ID) string {
 	return az.Prefix + string(b)
 }
 
 // ListBlobs list azure blobs with given prefix.
 func (az *azStorage) ListBlobs(ctx context.Context, prefix blob.ID, callback func(blob.Metadata) error) error {
-	prefixStr := az.Prefix + string(prefix)
+	prefixStr := az.getObjectNameString(prefix)
 
 	pager := az.service.NewListBlobsFlatPager(az.container, &azblob.ListBlobsFlatOptions{
 		Prefix: &prefixStr,
@@ -187,19 +212,7 @@ func (az *azStorage) ListBlobs(ctx context.Context, prefix blob.ID, callback fun
 		}
 
 		for _, it := range page.Segment.BlobItems {
-			n := *it.Name
-
-			bm := blob.Metadata{
-				BlobID: blob.ID(n[len(az.Prefix):]),
-				Length: *it.Properties.ContentLength,
-			}
-
-			// see if we have 'Kopiamtime' metadata, if so - trust it.
-			if t, ok := timestampmeta.FromValue(stringDefault(it.Metadata["kopiamtime"], "")); ok {
-				bm.Timestamp = t
-			} else {
-				bm.Timestamp = *it.Properties.LastModified
-			}
+			bm := az.getBlobMeta(it)
 
 			if err := callback(bm); err != nil {
 				return err
@@ -267,6 +280,7 @@ func (az *azStorage) putBlob(ctx context.Context, b blob.ID, data blob.Bytes, op
 	}
 
 	if opts.HasRetentionOptions() {
+		// kopia delete marker blob must be "Unlocked", thus it cannot be overridden to "Locked" here.
 		mode := azblobblob.ImmutabilityPolicySetting(opts.RetentionMode)
 		retainUntilDate := clock.Now().Add(opts.RetentionPeriod).UTC()
 		uo.ImmutabilityPolicyMode = &mode
@@ -413,7 +427,8 @@ func New(ctx context.Context, opt *Options, isCreate bool) (blob.Storage, error)
 	// verify Azure connection is functional by listing blobs in a bucket, which will fail if the container
 	// does not exist. We list with a prefix that will not exist, to avoid iterating through any objects.
 	nonExistentPrefix := fmt.Sprintf("kopia-azure-storage-initializing-%v", clock.Now().UnixNano())
-	if err := raw.ListBlobs(ctx, blob.ID(nonExistentPrefix), func(md blob.Metadata) error {
+
+	if err := raw.ListBlobs(ctx, blob.ID(nonExistentPrefix), func(_ blob.Metadata) error {
 		return nil
 	}); err != nil {
 		return nil, errors.Wrap(err, "unable to list from the bucket")

@@ -1,14 +1,15 @@
-const { app, BrowserWindow, Notification, screen, Menu, Tray, ipcMain, dialog, shell } = require('electron')
-const { autoUpdater } = require("electron-updater");
-const { resourcesPath, selectByOS } = require('./utils');
-const { toggleLaunchAtStartup, willLaunchAtStartup, refreshWillLaunchAtStartup } = require('./auto-launch');
-const { serverForRepo } = require('./server');
-const { loadConfigs, allConfigs, deleteConfigIfDisconnected, addNewConfig, configDir, isFirstRun, isPortableConfig } = require('./config');
-const Store = require('electron-store')
-const log = require("electron-log");
-const path = require('path');
-const isDev = require('electron-is-dev');
-const crypto = require('crypto')
+import { app, BrowserWindow, Notification, screen, Menu, Tray, ipcMain, dialog, shell } from 'electron';
+import pkg from "electron-updater";
+const autoUpdater = pkg.autoUpdater;
+import { iconsPath, publicPath, selectByOS } from './utils.js';
+import { toggleLaunchAtStartup, willLaunchAtStartup, refreshWillLaunchAtStartup } from './auto-launch.js';
+import { serverForRepo } from './server.js';
+import { loadConfigs, allConfigs, deleteConfigIfDisconnected, addNewConfig, configDir, isFirstRun, isPortableConfig } from './config.js';
+
+import Store from 'electron-store';
+import log from "electron-log";
+import path from 'path';
+import crypto from 'crypto';
 
 // Store to save parameters
 const store = new Store();
@@ -79,7 +80,7 @@ function showRepoWindow(repositoryID) {
     resizable: true,
     show: false,
     webPreferences: {
-      preload: path.join(resourcesPath(), 'preload.js'),
+      preload: path.join(publicPath(), 'preload.js'),
     },
   };
 
@@ -343,7 +344,7 @@ function viewReleaseNotes() {
 }
 
 function isOutsideOfApplicationsFolderOnMac() {
-  if (isDev || isPortableConfig()) {
+  if (!app.isPackaged || isPortableConfig()) {
     return false;
   }
 
@@ -422,7 +423,7 @@ app.on('ready', () => {
 
   tray = new Tray(
     path.join(
-      resourcesPath(), 'icons',
+      iconsPath(),
       selectByOS({ mac: 'kopiaTrayTemplate.png', win: 'kopia-tray.ico', linux: 'kopia-tray.png' })));
 
   tray.setToolTip('Kopia');
@@ -529,7 +530,7 @@ function updateTrayContextMenu() {
     autoUpdateMenuItems.push({ label: "KopiaUI is up-to-date: " + app.getVersion(), enabled: false });
   }
 
-  template = defaultReposTemplates.concat(additionalReposTemplates).concat([
+  let template = defaultReposTemplates.concat(additionalReposTemplates).concat([
     { type: 'separator' },
     { label: 'Connect To Another Repository...', click: addAnotherRepository },
     { type: 'separator' },

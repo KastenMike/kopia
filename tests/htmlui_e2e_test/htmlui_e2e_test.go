@@ -117,13 +117,13 @@ func createTestSnapshot(t *testing.T, ctx context.Context, sp *testutil.ServerPa
 	f, err := os.Create(filepath.Join(snap1Path, "big.file"))
 
 	// assert that no error occurred
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	// truncate file to 10 mb
 	err = f.Truncate(1e7)
 
 	// assert that no error occurred
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	// create test repository
 	require.NoError(t, chromedp.Run(ctx,
@@ -336,6 +336,8 @@ func TestByteRepresentation(t *testing.T) {
 
 		// begin test
 		require.NoError(t, chromedp.Run(ctx,
+			tc.captureScreenshot("initial0"),
+
 			tc.log("navigating to preferences tab"),
 			chromedp.Click("a[data-testid='tab-preferences']", chromedp.BySearch),
 			tc.captureScreenshot("initial"),

@@ -54,7 +54,6 @@ func (c *commandRepositorySyncTo) setup(svc advancedAppServices, parent commandP
 		cc := cmd.Command(prov.Name, "Synchronize repository data to another repository in "+prov.Description)
 		f.Setup(svc, cc)
 		cc.Action(func(kpc *kingpin.ParseContext) error {
-			//nolint:wrapcheck
 			return svc.runAppWithContext(kpc.SelectedCommand, func(ctx context.Context) error {
 				st, err := f.Connect(ctx, false, 0)
 				if err != nil {
@@ -82,19 +81,19 @@ func (c *commandRepositorySyncTo) setup(svc advancedAppServices, parent commandP
 const syncProgressInterval = 300 * time.Millisecond
 
 func (c *commandRepositorySyncTo) runSyncWithStorage(ctx context.Context, src blob.Reader, dst blob.Storage) error {
-	log(ctx).Infof("Synchronizing repositories:")
+	log(ctx).Info("Synchronizing repositories:")
 	log(ctx).Infof("  Source:      %v", src.DisplayName())
 	log(ctx).Infof("  Destination: %v", dst.DisplayName())
 
 	if !c.repositorySyncDelete {
-		log(ctx).Infof("NOTE: By default no BLOBs are deleted, pass --delete to allow it.")
+		log(ctx).Info("NOTE: By default no BLOBs are deleted, pass --delete to allow it.")
 	}
 
 	if err := c.ensureRepositoriesHaveSameFormatBlob(ctx, src, dst); err != nil {
 		return err
 	}
 
-	log(ctx).Infof("Looking for BLOBs to synchronize...")
+	log(ctx).Info("Looking for BLOBs to synchronize...")
 
 	var (
 		inSyncBlobs int
@@ -163,7 +162,7 @@ func (c *commandRepositorySyncTo) runSyncWithStorage(ctx context.Context, src bl
 		return nil
 	}
 
-	log(ctx).Infof("Copying...")
+	log(ctx).Info("Copying...")
 
 	c.beginSyncProgress()
 
@@ -230,20 +229,20 @@ func (c *commandRepositorySyncTo) runSyncBlobs(ctx context.Context, src blob.Rea
 
 	tt := timetrack.Start()
 
-	for i := 0; i < c.repositorySyncParallelism; i++ {
-		workerID := i
-
+	for workerID := range c.repositorySyncParallelism {
 		eg.Go(func() error {
 			for m := range copyCh {
 				log(ctx).Debugf("[%v] Copying %v (%v bytes)...\n", workerID, m.BlobID, m.Length)
+
 				if err := c.syncCopyBlob(ctx, m, src, dst); err != nil {
 					return errors.Wrapf(err, "error copying %v", m.BlobID)
 				}
 
 				numBlobs, bytesCopied := totalCopied.Add(m.Length)
-				progressMutex.Lock()
 				eta := "unknown"
 				speed := "-"
+
+				progressMutex.Lock()
 
 				if est, ok := tt.Estimate(float64(bytesCopied), float64(totalBytes)); ok {
 					eta = fmt.Sprintf("%v (%v)", est.Remaining, formatTimestamp(est.EstimatedEndTime))
@@ -253,15 +252,18 @@ func (c *commandRepositorySyncTo) runSyncBlobs(ctx context.Context, src blob.Rea
 				c.outputSyncProgress(
 					fmt.Sprintf("  Copied %v blobs (%v), Speed: %v, ETA: %v",
 						numBlobs, units.BytesString(bytesCopied), speed, eta))
+
 				progressMutex.Unlock()
 			}
 
 			for m := range deleteCh {
 				log(ctx).Debugf("[%v] Deleting %v (%v bytes)...\n", workerID, m.BlobID, m.Length)
+
 				if err := syncDeleteBlob(ctx, m, dst); err != nil {
 					return errors.Wrapf(err, "error deleting %v", m.BlobID)
 				}
 			}
+
 			return nil
 		})
 	}
@@ -314,7 +316,7 @@ func (c *commandRepositorySyncTo) syncCopyBlob(ctx context.Context, m blob.Metad
 			// run again without SetModTime, emit a warning
 			opt.SetModTime = time.Time{}
 
-			log(ctx).Warnf("destination repository does not support preserving modification times")
+			log(ctx).Warn("destination repository does not support preserving modification times")
 
 			c.repositorySyncTimes = false
 

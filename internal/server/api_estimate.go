@@ -84,7 +84,7 @@ func logBucketSamples(ctx context.Context, buckets snapshotfs.SampleBuckets, pre
 		hasAny = true
 
 		if showExamples && len(bucket.Examples) > 0 {
-			log(ctx).Infof("Examples:")
+			log(ctx).Info("Examples:")
 
 			for _, sample := range bucket.Examples {
 				log(ctx).Infof(" - %v\n", sample)
@@ -140,7 +140,6 @@ func handleEstimate(ctx context.Context, rc requestContext) (interface{}, *apiEr
 
 		ctrl.OnCancel(cancel)
 
-		//nolint:wrapcheck
 		return snapshotfs.Estimate(estimatectx, dir, policyTree, estimateTaskProgress{ctrl}, req.MaxExamplesPerBucket)
 	})
 

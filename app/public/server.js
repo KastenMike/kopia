@@ -1,11 +1,11 @@
-const { ipcMain } = require('electron');
-const path = require('path');
-const https = require('https');
+import { ipcMain } from 'electron';
+const path = await import('path');
+const https = await import('https');
 
-const { defaultServerBinary } = require('./utils');
-const { spawn } = require('child_process');
-const log = require("electron-log")
-const { configDir, isPortableConfig } = require('./config');
+import { defaultServerBinary } from './utils.js';
+import { spawn } from 'child_process';
+import log from "electron-log";
+import { configDir, isPortableConfig } from './config.js';
 
 let servers = {};
 
@@ -67,6 +67,8 @@ function newServerForRepo(repoID) {
 
             const statusUpdated = this.raiseStatusUpdatedEvent.bind(this);
 
+	    const pollInterval = 3000; 
+
             function pollOnce() {
                 if (!runningServerAddress || !runningServerCertificate || !runningServerPassword || !runningServerControlPassword) {
                     return;
@@ -78,6 +80,7 @@ function newServerForRepo(repoID) {
                     port: parseInt(new URL(runningServerAddress).port),
                     method: "GET",
                     path: "/api/v1/control/status",
+		    timeout: pollInterval,
                     headers: {
                         'Authorization': 'Basic ' + Buffer.from("server-control" + ':' + runningServerControlPassword).toString('base64')
                      }  
@@ -104,7 +107,7 @@ function newServerForRepo(repoID) {
                 req.end();
             }
 
-            const statusPollInterval = setInterval(pollOnce, 3000);
+            const statusPollInterval = setInterval(pollOnce, pollInterval);
 
             runningServerProcess.on('close', (code, signal) => {
                 this.appendToLog(`child process exited with code ${code} and signal ${signal}`);
@@ -239,8 +242,7 @@ ipcMain.on('status-fetch', (event, args) => {
     }
 })
 
-module.exports = {
-    serverForRepo(repoID) {
+export function serverForRepo(repoID) {
         let s = servers[repoID];
         if (s) {
             return s;
@@ -250,4 +252,4 @@ module.exports = {
         servers[repoID] = s;
         return s;
     }
-}
+

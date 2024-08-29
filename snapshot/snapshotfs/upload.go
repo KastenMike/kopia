@@ -3,6 +3,7 @@ package snapshotfs
 import (
 	"bytes"
 	"context"
+	stderrors "errors"
 	"io"
 	"math/rand"
 	"os"
@@ -18,7 +19,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/multierr"
 
 	"github.com/kopia/kopia/fs"
 	"github.com/kopia/kopia/fs/ignorefs"
@@ -145,10 +145,9 @@ func (u *Uploader) uploadFileInternal(ctx context.Context, parentCheckpointRegis
 	defer u.Progress.FinishedHashingFile(relativePath, f.Size())
 
 	if pf, ok := f.(snapshot.HasDirEntryOrNil); ok {
-		switch de, err := pf.DirEntryOrNil(ctx); {
-		case err != nil:
+		if de, err := pf.DirEntryOrNil(ctx); err != nil {
 			return nil, errors.Wrap(err, "can't read placeholder")
-		case err == nil && de != nil:
+		} else if de != nil {
 			// We have read sufficient information from the shallow file's extended
 			// attribute to construct DirEntry.
 			_, err := u.repo.VerifyObject(ctx, de.ObjectID)
@@ -161,11 +160,12 @@ func (u *Uploader) uploadFileInternal(ctx context.Context, parentCheckpointRegis
 	}
 
 	comp := pol.CompressionPolicy.CompressorForFile(f)
+	splitterName := pol.SplitterPolicy.SplitterForFile(f)
 
 	chunkSize := pol.UploadPolicy.ParallelUploadAboveSize.OrDefault(-1)
 	if chunkSize < 0 || f.Size() <= chunkSize {
 		// all data fits in 1 full chunks, upload directly
-		return u.uploadFileData(ctx, parentCheckpointRegistry, f, f.Name(), 0, -1, comp)
+		return u.uploadFileData(ctx, parentCheckpointRegistry, f, f.Name(), 0, -1, comp, splitterName)
 	}
 
 	// we always have N+1 parts, first N are exactly chunkSize, last one has undetermined length
@@ -178,8 +178,7 @@ func (u *Uploader) uploadFileInternal(ctx context.Context, parentCheckpointRegis
 	var wg workshare.AsyncGroup[*uploadWorkItem]
 	defer wg.Close()
 
-	for i := 0; i < len(parts); i++ {
-		i := i
+	for i := range parts {
 		offset := int64(i) * chunkSize
 
 		length := chunkSize
@@ -190,19 +189,19 @@ func (u *Uploader) uploadFileInternal(ctx context.Context, parentCheckpointRegis
 
 		if wg.CanShareWork(u.workerPool) {
 			// another goroutine is available, delegate to them
-			wg.RunAsync(u.workerPool, func(c *workshare.Pool[*uploadWorkItem], request *uploadWorkItem) {
-				parts[i], partErrors[i] = u.uploadFileData(ctx, parentCheckpointRegistry, f, uuid.NewString(), offset, length, comp)
+			wg.RunAsync(u.workerPool, func(_ *workshare.Pool[*uploadWorkItem], _ *uploadWorkItem) {
+				parts[i], partErrors[i] = u.uploadFileData(ctx, parentCheckpointRegistry, f, uuid.NewString(), offset, length, comp, splitterName)
 			}, nil)
 		} else {
 			// just do the work in the current goroutine
-			parts[i], partErrors[i] = u.uploadFileData(ctx, parentCheckpointRegistry, f, uuid.NewString(), offset, length, comp)
+			parts[i], partErrors[i] = u.uploadFileData(ctx, parentCheckpointRegistry, f, uuid.NewString(), offset, length, comp, splitterName)
 		}
 	}
 
 	wg.Wait()
 
 	// see if we got any errors
-	if err := multierr.Combine(partErrors...); err != nil {
+	if err := stderrors.Join(partErrors...); err != nil {
 		return nil, errors.Wrap(err, "error uploading parts")
 	}
 
@@ -234,7 +233,7 @@ func concatenateParts(ctx context.Context, rep repo.RepositoryWriter, name strin
 	return de, nil
 }
 
-func (u *Uploader) uploadFileData(ctx context.Context, parentCheckpointRegistry *checkpointRegistry, f fs.File, fname string, offset, length int64, compressor compression.Name) (*snapshot.DirEntry, error) {
+func (u *Uploader) uploadFileData(ctx context.Context, parentCheckpointRegistry *checkpointRegistry, f fs.File, fname string, offset, length int64, compressor compression.Name, splitterName string) (*snapshot.DirEntry, error) {
 	file, err := f.Open(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to open file")
@@ -244,12 +243,12 @@ func (u *Uploader) uploadFileData(ctx context.Context, parentCheckpointRegistry 
 	writer := u.repo.NewObjectWriter(ctx, object.WriterOptions{
 		Description: "FILE:" + fname,
 		Compressor:  compressor,
+		Splitter:    splitterName,
 		AsyncWrites: 1, // upload chunk in parallel to writing another chunk
 	})
 	defer writer.Close() //nolint:errcheck
 
 	parentCheckpointRegistry.addCheckpointCallback(fname, func() (*snapshot.DirEntry, error) {
-		//nolint:govet
 		checkpointID, err := writer.Checkpoint()
 		if err != nil {
 			return nil, errors.Wrap(err, "checkpoint error")
@@ -353,9 +352,11 @@ func (u *Uploader) uploadStreamingFileInternal(ctx context.Context, relativePath
 	}()
 
 	comp := pol.CompressionPolicy.CompressorForFile(f)
+
 	writer := u.repo.NewObjectWriter(ctx, object.WriterOptions{
 		Description: "STREAMFILE:" + f.Name(),
 		Compressor:  comp,
+		Splitter:    pol.SplitterPolicy.SplitterForFile(f),
 	})
 
 	defer writer.Close() //nolint:errcheck
@@ -598,11 +599,33 @@ func (u *Uploader) uploadDirWithCheckpointing(ctx context.Context, rootDir fs.Di
 		return nil, dirReadError{errors.Wrap(err, "error executing before-snapshot-root action")}
 	}
 
+	defer u.executeAfterFolderAction(ctx, "after-snapshot-root", policyTree.EffectivePolicy().Actions.AfterSnapshotRoot, localDirPathOrEmpty, &hc)
+
+	p := &policyTree.EffectivePolicy().OSSnapshotPolicy
+
+	switch mode := osSnapshotMode(p); mode {
+	case policy.OSSnapshotNever:
+	case policy.OSSnapshotAlways, policy.OSSnapshotWhenAvailable:
+		if overrideDir != nil {
+			rootDir = overrideDir
+		}
+
+		switch osSnapshotDir, cleanup, err := createOSSnapshot(ctx, rootDir, p); {
+		case err == nil:
+			defer cleanup()
+
+			overrideDir = osSnapshotDir
+
+		case mode == policy.OSSnapshotWhenAvailable:
+			uploadLog(ctx).Warnf("OS file system snapshot failed (ignoring): %v", err)
+		default:
+			return nil, dirReadError{errors.Wrap(err, "error creating OS file system snapshot")}
+		}
+	}
+
 	if overrideDir != nil {
 		rootDir = u.wrapIgnorefs(uploadLog(ctx), overrideDir, policyTree, true)
 	}
-
-	defer u.executeAfterFolderAction(ctx, "after-snapshot-root", policyTree.EffectivePolicy().Actions.AfterSnapshotRoot, localDirPathOrEmpty, &hc)
 
 	return uploadDirInternal(ctx, u, rootDir, policyTree, previousDirs, localDirPathOrEmpty, ".", &dmb, &cp)
 }
@@ -749,9 +772,9 @@ func (u *Uploader) effectiveParallelFileReads(pol *policy.Policy) int {
 	}
 
 	// use policy setting or number of CPUs.
-	max := pol.UploadPolicy.MaxParallelFileReads.OrDefault(runtime.NumCPU())
-	if p < 1 || p > max {
-		return max
+	maxParallelism := pol.UploadPolicy.MaxParallelFileReads.OrDefault(runtime.NumCPU())
+	if p < 1 || p > maxParallelism {
+		return maxParallelism
 	}
 
 	return p
@@ -787,7 +810,7 @@ func (u *Uploader) processDirectoryEntries(
 		entryRelativePath := path.Join(dirRelativePath, entry2.Name())
 
 		if wg.CanShareWork(u.workerPool) {
-			wg.RunAsync(u.workerPool, func(c *workshare.Pool[*uploadWorkItem], wi *uploadWorkItem) {
+			wg.RunAsync(u.workerPool, func(_ *workshare.Pool[*uploadWorkItem], wi *uploadWorkItem) {
 				wi.err = u.processSingle(ctx, entry2, entryRelativePath, parentDirBuilder, policyTree, prevDirs, localDirPathOrEmpty, parentCheckpointRegistry)
 			}, &uploadWorkItem{})
 		} else {
@@ -1049,10 +1072,9 @@ type dirReadError struct {
 
 func uploadShallowDirInternal(ctx context.Context, directory fs.Directory, u *Uploader) (*snapshot.DirEntry, error) {
 	if pf, ok := directory.(snapshot.HasDirEntryOrNil); ok {
-		switch de, err := pf.DirEntryOrNil(ctx); {
-		case err != nil:
+		if de, err := pf.DirEntryOrNil(ctx); err != nil {
 			return nil, errors.Wrapf(err, "error reading placeholder for %q", directory.Name())
-		case err == nil && de != nil:
+		} else if de != nil {
 			if _, err := u.repo.VerifyObject(ctx, de.ObjectID); err != nil {
 				return nil, errors.Wrapf(err, "invalid placeholder for %q contains foreign object.ID", directory.Name())
 			}
@@ -1132,6 +1154,7 @@ func uploadDirInternal(
 		}
 
 		checkpointManifest := thisCheckpointBuilder.Build(fs.UTCTimestampFromTime(directory.ModTime()), IncompleteReasonCheckpoint)
+
 		oid, err := writeDirManifest(ctx, u.repo, dirRelativePath, checkpointManifest)
 		if err != nil {
 			return nil, errors.Wrap(err, "error writing dir manifest")
