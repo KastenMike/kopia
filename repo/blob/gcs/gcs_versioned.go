@@ -114,7 +114,6 @@ func (gcs *gcsStorage) infoToVersionMetadata(prefix string, oi *storage.ObjectAt
 		Timestamp: oi.Created,
 	}
 
-	fmt.Printf("****\n\nfile: %s#%d has created: %v and deleted: %v - vs PIT: %v\n\n****", oi.Name, oi.Generation, oi.Created, oi.Deleted, *gcs.PointInTime)
 	return versionMetadata{
 		Metadata:       bm,
 		IsDeleteMarker: !oi.Deleted.IsZero() && (gcs.PointInTime == nil || oi.Deleted.Before(*gcs.PointInTime)), // needs to consider PIT...
