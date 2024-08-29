@@ -3,7 +3,6 @@ package gcs
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/kopia/kopia/repo/blob"
@@ -107,15 +106,6 @@ func newestAtUnlessDeleted(vs []versionMetadata, t time.Time) (v versionMetadata
 
 	for _, xxx := range vs {
 		fmt.Printf("newestAtUnlessDeleted: PRE SORT: found version %s del %s. deleted=%t\n", xxx.Version, xxx.Timestamp, xxx.IsDeleteMarker)
-	}
-
-	// Sort
-	sort.Slice(vs, func(i, j int) bool {
-		return vs[i].Timestamp.Before(vs[j].Timestamp)
-	})
-
-	for _, xxx := range vs {
-		fmt.Printf("newestAtUnlessDeleted POST SORT: found version %s del %s. deleted=%t\n", xxx.Version, xxx.Timestamp, xxx.IsDeleteMarker)
 	}
 
 	vs = getOlderThan(vs, t)
