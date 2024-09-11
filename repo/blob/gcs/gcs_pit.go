@@ -78,10 +78,10 @@ func (gcs *gcsPointInTimeStorage) getMetadata(ctx context.Context, b blob.ID) (v
 	var vml []versionMetadata
 
 	if err := gcs.getBlobVersions(ctx, b, func(m versionMetadata) error {
-		fmt.Printf("getMetadata - found blob (%s#%s). deleted=%t\n", m.Version, m.Timestamp, m.IsDeleteMarker)
+		fmt.Printf("getMetadata - found blob (%s#%s) with timestamp %v. deleted=%t\n", m.BlobID, m.Version, m.Timestamp, m.IsDeleteMarker)
 		// only include versions older than s.pointInTime
 		if !m.Timestamp.After(gcs.pointInTime) {
-			fmt.Printf("getMetadata - Skipping version %s with timestamp %s. vs gcs.pointInTime %v\n", m.Version, m.Timestamp, gcs.pointInTime)
+			fmt.Printf("getMetadata - Adding blob (%s#%s) with timestamp %s. vs gcs.pointInTime %v\n", m.BlobID, m.Version, m.Timestamp, gcs.pointInTime)
 			vml = append(vml, m)
 		}
 
@@ -91,6 +91,7 @@ func (gcs *gcsPointInTimeStorage) getMetadata(ctx context.Context, b blob.ID) (v
 	}
 
 	if v, found := newestAtUnlessDeleted(vml, gcs.pointInTime); found {
+		fmt.Printf("getMetadata returning blob (%s#%s) @ %v\n", v.BlobID, v.Version, v.Timestamp)
 		return v, nil
 	}
 
@@ -98,16 +99,20 @@ func (gcs *gcsPointInTimeStorage) getMetadata(ctx context.Context, b blob.ID) (v
 }
 
 // newestAtUnlessDeleted returns the last version in the list older than the PIT.
-func newestAtUnlessDeleted(vs []versionMetadata, t time.Time) (v versionMetadata, found bool) {
-	vs = getOlderThan(vs, t)
+func newestAtUnlessDeleted(vx []versionMetadata, t time.Time) (v versionMetadata, found bool) {
+	vs := getOlderThan(vx, t)
 
 	if len(vs) == 0 {
-		fmt.Printf("newestAtUnlessDeleted - none found older than timestamp %v\n", t)
+		var blobName string
+		if len(vx) > 0 {
+			blobName = string(vx[0].BlobID)
+		}
+		fmt.Printf("newestAtUnlessDeleted - none found older than timestamp %v for blob: %s\n", t, blobName)
 		return versionMetadata{}, false
 	}
 
 	v = vs[len(vs)-1]
-	fmt.Printf("newestAtUnlessDeleted - returning blob: (%s#%s), deleted=%v", v.BlobID, v.Version, v.IsDeleteMarker)
+	fmt.Printf("newestAtUnlessDeleted - returning blob: (%s#%s), deleted=%v\n", v.BlobID, v.Version, v.IsDeleteMarker)
 
 	return v, !v.IsDeleteMarker
 }
@@ -117,9 +122,9 @@ func newestAtUnlessDeleted(vs []versionMetadata, t time.Time) (v versionMetadata
 // timestamp order.
 func getOlderThan(vs []versionMetadata, t time.Time) []versionMetadata {
 	for i := range vs {
-		fmt.Printf("getOlderThan - blob (%s#%s) created %s \n", vs[i].BlobID, vs[i].Version, vs[i].Timestamp)
+		fmt.Printf("getOlderThan - blob (%s#%s) created %s \n", string(vs[i].BlobID), vs[i].Version, vs[i].Timestamp)
 		if vs[i].Timestamp.After(t) {
-			fmt.Printf("getOlderThan - Skipping blob (%s#%s) as it's newer than %v\n", vs[i].BlobID, vs[i].Version, t)
+			fmt.Printf("getOlderThan - Skipping blob (%s#%s) as it's newer than %v\n", string(vs[i].BlobID), vs[i].Version, t)
 			return vs[:i]
 		}
 	}

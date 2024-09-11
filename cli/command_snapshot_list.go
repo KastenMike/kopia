@@ -122,23 +122,31 @@ func findManifestIDs(ctx context.Context, rep repo.Repository, source string, ta
 func (c *commandSnapshotList) run(ctx context.Context, rep repo.Repository) error {
 	tags, err := getTags(c.snapshotListTags)
 	if err != nil {
+		fmt.Printf("commandSnapshotList - getTags err: %v\n", err)
 		return err
 	}
 
+	fmt.Printf("commandSnapshotList - c.snapshotListPath: %s\n", c.snapshotListPath)
 	manifestIDs, fullPath, err := findManifestIDs(ctx, rep, c.snapshotListPath, tags)
 	if err != nil {
+		fmt.Printf("commandSnapshotList - findManifestIDs err: %v\n", err)
 		return err
 	}
+	fmt.Printf("commandSnapshotList - found %d manifestIDs!\n", len(manifestIDs))
 
 	manifests, err := snapshot.LoadSnapshots(ctx, rep, manifestIDs)
 	if err != nil {
+		fmt.Printf("commandSnapshotList - LoadSnapshots err: %v\n", err)
 		return errors.Wrap(err, "unable to load snapshots")
 	}
+	fmt.Printf("commandSnapshotList - found %d manifests!\n", len(manifests))
 
 	if c.jo.jsonOutput {
+		fmt.Printf("jsonOutput of commandSnapshotList\n")
 		return c.outputJSON(ctx, rep, manifests)
 	}
 
+	fmt.Printf("NOT jsonOutput of commandSnapshotList!\n")
 	return c.outputManifestGroups(ctx, rep, manifests, fullPath)
 }
 
