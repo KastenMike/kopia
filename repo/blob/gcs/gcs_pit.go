@@ -17,7 +17,7 @@ type gcsPointInTimeStorage struct {
 }
 
 func (gcs *gcsPointInTimeStorage) ListBlobs(ctx context.Context, blobIDPrefix blob.ID, cb func(bm blob.Metadata) error) error {
-	fmt.Printf("ListBlobs del pit: %s\n", blobIDPrefix)
+	fmt.Printf("gcsPointInTimeStorage/ListBlobs with prefix: %s\n", blobIDPrefix)
 	var (
 		previousID blob.ID
 		vs         []versionMetadata
@@ -58,33 +58,30 @@ func (gcs *gcsPointInTimeStorage) ListBlobs(ctx context.Context, blobIDPrefix bl
 }
 
 func (gcs *gcsPointInTimeStorage) GetBlob(ctx context.Context, b blob.ID, offset, length int64, output blob.OutputBuffer) error {
-	fmt.Printf("GetBlob del pit: %s\n", b)
 	// getMetadata returns the specific blob version at time t
 	m, err := gcs.getMetadata(ctx, b)
 	if err != nil {
 		return errors.Wrap(err, "getting metadata")
 	}
 
-	fmt.Printf("GetBlob del pit. faccio getBlobWithVersion di %s versione %s\n", b, m.Version)
+	fmt.Printf("GetBlob - blob: (%s#%s)\n", b, m.Version)
 	return gcs.getBlobWithVersion(ctx, b, m.Version, offset, length, output)
 }
 
 func (gcs *gcsPointInTimeStorage) GetMetadata(ctx context.Context, b blob.ID) (blob.Metadata, error) {
-	fmt.Printf("GetMetadata del pit %s\n", b)
 	bm, err := gcs.getMetadata(ctx, b)
 
 	return bm.Metadata, err
 }
 
 func (gcs *gcsPointInTimeStorage) getMetadata(ctx context.Context, b blob.ID) (versionMetadata, error) {
-	fmt.Printf("getMetadata del pit %s\n", b)
 	var vml []versionMetadata
 
 	if err := gcs.getBlobVersions(ctx, b, func(m versionMetadata) error {
-		fmt.Printf("  trovata versione %s del %s. deleted=%t\n", m.Version, m.Timestamp, m.IsDeleteMarker)
+		fmt.Printf("getMetadata - found blob (%s#%s). deleted=%t\n", m.Version, m.Timestamp, m.IsDeleteMarker)
 		// only include versions older than s.pointInTime
 		if !m.Timestamp.After(gcs.pointInTime) {
-			fmt.Printf("      Skippo versione %s del %s. Troppo nuova.\n", m.Version, m.Timestamp)
+			fmt.Printf("getMetadata - Skipping version %s with timestamp %s. vs gcs.pointInTime %v\n", m.Version, m.Timestamp, gcs.pointInTime)
 			vml = append(vml, m)
 		}
 
@@ -105,12 +102,13 @@ func newestAtUnlessDeleted(vs []versionMetadata, t time.Time) (v versionMetadata
 	vs = getOlderThan(vs, t)
 
 	if len(vs) == 0 {
+		fmt.Printf("newestAtUnlessDeleted - none found older than timestamp %v\n", t)
 		return versionMetadata{}, false
 	}
 
 	v = vs[len(vs)-1]
+	fmt.Printf("newestAtUnlessDeleted - returning blob: (%s#%s), deleted=%v", v.BlobID, v.Version, v.IsDeleteMarker)
 
-	//return v, !v.IsDeleteMarker
 	return v, !v.IsDeleteMarker
 }
 
@@ -118,12 +116,10 @@ func newestAtUnlessDeleted(vs []versionMetadata, t time.Time) (v versionMetadata
 // and uses the same slice storage as vs. Assumes entries in vs are in descending
 // timestamp order.
 func getOlderThan(vs []versionMetadata, t time.Time) []versionMetadata {
-	fmt.Printf("getOlderThan %s \n", t)
-
 	for i := range vs {
-		fmt.Printf("getOlderThan %s: vs[i].Timestamp: %s \n", t, vs[i].Timestamp)
+		fmt.Printf("getOlderThan - blob (%s#%s) created %s \n", vs[i].BlobID, vs[i].Version, vs[i].Timestamp)
 		if vs[i].Timestamp.After(t) {
-			fmt.Printf("  Skippo versione %s del %s. Troppo nuova.\n", vs[i].Version, vs[i].Timestamp)
+			fmt.Printf("getOlderThan - Skipping blob (%s#%s) as it's newer than %v\n", vs[i].BlobID, vs[i].Version, t)
 			return vs[:i]
 		}
 	}
@@ -138,6 +134,7 @@ func maybePointInTimeStore(ctx context.Context, gcs *gcsStorage, pointInTime *ti
 		return gcs, nil
 	}
 
+	fmt.Printf("PIT state with %v\n", *pointInTime)
 	// Does the bucket supports versioning?
 	attrs, err := gcs.bucket.Attrs(ctx)
 	if err != nil {

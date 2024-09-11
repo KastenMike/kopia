@@ -51,7 +51,7 @@ func (gcs *gcsPointInTimeStorage) listBlobVersions(ctx context.Context, prefix b
 }
 
 func (gcs *gcsPointInTimeStorage) list(ctx context.Context, prefix blob.ID, onlyMatching bool, callback versionMetadataCallback) error {
-	fmt.Printf("in list per blob.ID: %s\n", prefix)
+	fmt.Printf("gcsPointInTimeStorage/list per blob.ID: %s\n", prefix)
 	query := storage.Query{
 		Prefix: gcs.getObjectNameString(prefix),
 		// Versions true to output all generations of objects
