@@ -68,16 +68,12 @@ func (s *sourceSnapshots) Child(ctx context.Context, name string) (fs.Entry, err
 }
 
 func (s *sourceSnapshots) Iterate(ctx context.Context) (fs.DirectoryIterator, error) {
-	fmt.Printf("sourceSnapshots/Iterate reached \n")
 	manifests, err := snapshot.ListSnapshots(ctx, s.rep, s.src)
 	if err != nil {
-		fmt.Printf("sourceSnapshots/ListSnapshots err: %v \n", err)
 		return nil, errors.Wrap(err, "unable to list snapshots")
 	}
 
 	var entries []fs.Entry
-
-	fmt.Printf("sourceSnapshots - found %d manifest \n", len(manifests))
 
 	for _, m := range manifests {
 		name := m.StartTime.Format("20060102-150405")
