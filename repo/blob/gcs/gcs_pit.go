@@ -93,10 +93,6 @@ func newestAtUnlessDeleted(vx []versionMetadata, t time.Time) (v versionMetadata
 	vs := getOlderThan(vx, t)
 
 	if len(vs) == 0 {
-		var blobName string
-		if len(vx) > 0 {
-			blobName = string(vx[0].BlobID)
-		}
 		return versionMetadata{}, false
 	}
 
