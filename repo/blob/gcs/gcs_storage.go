@@ -195,7 +195,6 @@ func (gcs *gcsStorage) ExtendBlobRetention(ctx context.Context, b blob.ID, opts 
 	_, err := gcs.bucket.Object(gcs.getObjectNameString(b)).Update(ctx, storage.ObjectAttrsToUpdate{Retention: ObjectRetention})
 
 	if err != nil {
-		fmt.Printf("failed to add retention to object: %v\n", err)
 		return errors.Wrap(err, "unable to extend retention period to "+retainUntilDate.String())
 	}
 

@@ -2,7 +2,6 @@ package gcs
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -32,7 +31,6 @@ func (gcs *gcsPointInTimeStorage) getBlobVersions(ctx context.Context, prefix bl
 	if err := gcs.list(ctx, prefix, true, func(vm versionMetadata) error {
 		foundBlobs = true
 
-		fmt.Printf("Found blobs\n")
 		return callback(vm)
 	}); err != nil {
 		return err
@@ -51,7 +49,6 @@ func (gcs *gcsPointInTimeStorage) listBlobVersions(ctx context.Context, prefix b
 }
 
 func (gcs *gcsPointInTimeStorage) list(ctx context.Context, prefix blob.ID, onlyMatching bool, callback versionMetadataCallback) error {
-	fmt.Printf("gcsPointInTimeStorage/list per blob.ID: %s\n", prefix)
 	query := storage.Query{
 		Prefix: gcs.getObjectNameString(prefix),
 		// Versions true to output all generations of objects
@@ -79,8 +76,6 @@ func (gcs *gcsPointInTimeStorage) list(ctx context.Context, prefix blob.ID, only
 
 		oi := attrs
 		om := gcs.getVersionMetadata(query.Prefix, oi)
-
-		fmt.Printf("found blob: %s -- om.BlobID: %s -- query.Prefix: %s -- prefix: %s\n", oi.Name, om.BlobID, query.Prefix, prefix)
 
 		if errCallback := callback(om); errCallback != nil {
 			return errors.Wrapf(errCallback, "callback failed for %q", attrs.Name)
